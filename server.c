@@ -4,52 +4,46 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <pthread.h>
 #include <sys/socket.h>
 #include <sys/types.h>
-#define MAX 80
+
 #define PORT 8080
 #define SA struct sockaddr
 
-void recvMessage(int connfd)
-{
-	char buff[MAX];
-	int n;
-	// infinite loop for chat
-	for (;;) {
-		bzero(buff, MAX);
+int clientCount = 0;
+static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
 
-		// read the message from client and copy it in buffer
-		read(connfd, buff, sizeof(buff));
-		printf("From client: %s", buff);
+struct client {
+	int index;
+	int sockID;
+	int grpID;
+	struct sockaddr_in clientAddr;
+	int len;
+};
 
-		// if msg contains "Exit" then server exit and chat ended.
-		if (strncmp("exit", buff, 4) == 0) {
-			printf("Server Exit...\n");
-			break;
-		}
+struct client Client[1024];
+pthread_t thread[1024]; 
+
+void * doNetworking(void * ClientDetail){
+
+	struct client* clientDetail = (struct client*) ClientDetail;
+	int index = clientDetail -> index;
+	int clientSocket = clientDetail -> sockID;
+
+	printf("Client %d connected, with a socketID of %d\n", index + 1, Client[index].sockID);
+
+	while(1){
+
+		char data[1024];
+		int read = recv(clientSocket, data, 1024, 0);
+		data[read] = '\0';
+		printf("%s", data);
+
 	}
-}
 
-// Function designed for chat between client and server.
-void sendMessage(int connfd)
-{
-	char buff[MAX];
-	int n;
-	// infinite loop for chat
-	for (;;) {
-		bzero(buff, MAX);
-		printf("-> ");
-		n = 0;
-		// copy server message in the buffer
-		while ((buff[n++] = getchar()) != '\n');
-		write(connfd, buff, sizeof(buff));
-
-		// if msg contains "Exit" then server exit and chat ended.
-		if (strncmp("exit", buff, 4) == 0) {
-			printf("Server Exit...\n");
-			break;
-		}
-	}
+	return NULL;
 }
 
 // Driver function
@@ -60,52 +54,44 @@ int main()
 	struct sockaddr_in servaddr, cli;
 
 	// socket create and verification
-	sockfd = socket(AF_INET, SOCK_STREAM, 0);
+	int serverSocket = socket(PF_INET, SOCK_STREAM, 0);
+
 	if (sockfd == -1) {
 		printf("socket creation failed...\n");
-		exit(0);
+		return EXIT_FAILURE;
 	}
 	bzero(&servaddr, sizeof(servaddr));
 
-	// assign IP, PORT
+	// assign IP, PORT, PROTOCOL
 	servaddr.sin_family = AF_INET;
 	servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
 	servaddr.sin_port = htons(PORT);
 
-	// Binding newly created socket to given IP and verificatio
-	if ((bind(sockfd, (SA*)&servaddr, sizeof(servaddr))) != 0) {
-		printf("socket bind failed...\n");
-		exit(0);
-	}
-
-	// Now server is ready to listen and verification
-	if ((listen(sockfd, 5)) != 0) {
-		printf("Listen failed...\n");
-		exit(0);
-	}
-	else printf("Server listening..\n");
-	len = sizeof(cli);
-
-	// Accept the data packet from client and verification
-	connfd = accept(sockfd, (SA*) &cli, &len);
-	if (connfd < 0) {
-		printf("server accept failed...\n");
-		exit(0);
-	}
-	else printf("server accept the client...\n");
-
-	// Function for chatting between client and server
-
-	pid_t pid = fork();
-	if (pid == -1){
-		perror("fork error");
+	// Binding & listening verification
+	if(bind(serverSocket,(struct sockaddr *) &servaddr , sizeof(servaddr)) == -1) {
+		perror("error binding...");
 		return EXIT_FAILURE;
-	} else if (pid == 0) {
-		recvMessage(connfd);
-	} else {
-		sendMessage(connfd);
+	}
+	if(listen(serverSocket, 1024) == -1){
+		perror("error listening...");
+		return EXIT_FAILURE;
+	}
+	else printf("Server listening...\n");
+
+	// threads each new connection to the server, and links a struct to each client
+	unsigned int newClient;
+	while(1){
+		newClient = Client[clientCount].len;
+		Client[clientCount].sockID = accept(serverSocket, (struct sockaddr*) &Client[clientCount].clientAddr, &newClient);
+		Client[clientCount].index = clientCount;
+
+		pthread_create(&thread[clientCount], NULL, doNetworking, (void *) &Client[clientCount]);
+
+		clientCount ++;
 	}
 
+	for(int i = 0 ; i < clientCount ; i ++)
+		pthread_join(thread[i], NULL);
 	// After chatting close the socket
 	close(sockfd);
 }

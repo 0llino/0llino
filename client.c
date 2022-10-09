@@ -18,8 +18,9 @@ void recvMessage(int sock)
         
         // like 'xor buff, buff'
 		bzero(buff, MAX);
+		printf("-");
         read(sock, buff, sizeof(buff));
-		printf("From Server : %s", buff);
+		printf(" %s", buff);
 		
         if ((strncmp(buff, "exit", 4)) == 0) {
 			printf("Client Exit...\n");
@@ -35,7 +36,6 @@ void sendMessage(int sock)
 	for (;;) { 
         // like 'xor buff, buff'
 		bzero(buff, MAX);
-		printf("-> ");
 		n = 0;
 		
         while ((buff[n++] = getchar()) != '\n');
@@ -71,7 +71,7 @@ int main()
 		perror("connection with server error");
 		exit(0);
 	}
-	else printf("connected to the server..\n");
+	else printf("connected to the serve...\n");
 
 	pid_t pid = fork();
 	if (pid == -1){
