@@ -5,11 +5,13 @@
 #include <string.h>
 #include <strings.h> // bzero()
 #include <sys/socket.h>
+#include <pthread.h>
 #include <unistd.h> // read(), write(), close()
 
 #define MAX 80
 #define PORT 8080
 #define SA struct sockaddr
+pthread_t thread[1024]; 
 
 void recvMessage(int sock)
 {
@@ -18,9 +20,8 @@ void recvMessage(int sock)
         
         // like 'xor buff, buff'
 		bzero(buff, MAX);
-		printf("-");
         read(sock, buff, sizeof(buff));
-		printf(" %s", buff);
+		printf("%s", buff);
 		
         if ((strncmp(buff, "exit", 4)) == 0) {
 			printf("Client Exit...\n");
@@ -71,7 +72,7 @@ int main()
 		perror("connection with server error");
 		exit(0);
 	}
-	else printf("connected to the serve...\n");
+	else printf("connected to the server...\n");
 
 	pid_t pid = fork();
 	if (pid == -1){
@@ -82,7 +83,6 @@ int main()
 	} else {
 		recvMessage(sock);
 	}
-
 	// close the socket
 	close(sock);
 }

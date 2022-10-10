@@ -26,37 +26,54 @@ struct client {
 struct client Client[1024];
 pthread_t thread[1024]; 
 
+// functon handeling connexions
 void * doNetworking(void * ClientDetail){
-
+	// 
 	struct client* clientDetail = (struct client*) ClientDetail;
 	int index = clientDetail -> index;
 	int clientSocket = clientDetail -> sockID;
+	char dataIn[1024];
+	char dataOut[1024];
+	printf("Client %d connected, with a socketID of %d\n", index + 1, clientSocket);
 
-	printf("Client %d connected, with a socketID of %d\n", index + 1, Client[index].sockID);
+	pid_t pid = fork();
 
-	while(1){
-
-		char data[1024];
-		int read = recv(clientSocket, data, 1024, 0);
-		data[read] = '\0';
-		printf("%s", data);
-
+	if(pid == -1){
+		perror("fork error");
+	} else if (pid == 0) {
+		// Receive messages
+		while(1){
+			bzero(dataIn, 1024);
+			int read = recv(clientSocket, dataIn, 1024, 0);
+			dataIn[read] = '\0';
+			printf("%s", dataIn);
+		}
+	} else {
+		// Send messages
+		int n = 0;
+		while(1){
+			bzero(dataOut, 1024);
+			n = 0;
+			while ((dataOut[n++] = getchar()) != '\n');
+			for (int i = 0; i < clientCount; i++){
+				write(Client[clientCount].sockID, dataOut, sizeof(dataOut));
+			}
+			//write(clientSocket, dataOut, sizeof(dataOut));
+		}
 	}
 
 	return NULL;
 }
 
-// Driver function
+// main
 int main()
 {
-	int sockfd, connfd;
-    unsigned int len;
-	struct sockaddr_in servaddr, cli;
+	struct sockaddr_in servaddr;
 
-	// socket create and verification
+	// socket create & verification
 	int serverSocket = socket(PF_INET, SOCK_STREAM, 0);
 
-	if (sockfd == -1) {
+	if (serverSocket == -1) {
 		printf("socket creation failed...\n");
 		return EXIT_FAILURE;
 	}
@@ -84,14 +101,14 @@ int main()
 		newClient = Client[clientCount].len;
 		Client[clientCount].sockID = accept(serverSocket, (struct sockaddr*) &Client[clientCount].clientAddr, &newClient);
 		Client[clientCount].index = clientCount;
-
+		
 		pthread_create(&thread[clientCount], NULL, doNetworking, (void *) &Client[clientCount]);
-
+		
 		clientCount ++;
 	}
 
 	for(int i = 0 ; i < clientCount ; i ++)
 		pthread_join(thread[i], NULL);
 	// After chatting close the socket
-	close(sockfd);
+	close(serverSocket);
 }
