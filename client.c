@@ -8,23 +8,26 @@
 #include <pthread.h>
 #include <unistd.h> // read(), write(), close()
 
-#define MAX 80
+#define MAX 254
 #define PORT 8080
 #define SA struct sockaddr
+
 pthread_t thread[1024]; 
+char pseudo[MAX];
 
 void recvMessage(int sock)
 {
 	char buff[MAX];
-	for (;;) {
-        
+	while(1) {
         // like 'xor buff, buff'
 		bzero(buff, MAX);
+
         read(sock, buff, sizeof(buff));
 		printf("%s", buff);
-		
-        if ((strncmp(buff, "exit", 4)) == 0) {
-			printf("Client Exit...\n");
+
+		if ((strncmp(buff, "/exit", 5)) == 0) {
+			printf("\nClient Exit...\n");
+			close(sock);
 			break;
 		}
 	}
@@ -34,16 +37,18 @@ void sendMessage(int sock)
 {
 	char buff[MAX];
 	int n;
-	for (;;) { 
+
+	while(1) { 
         // like 'xor buff, buff'
 		bzero(buff, MAX);
 		n = 0;
 		
+		//Message to send
         while ((buff[n++] = getchar()) != '\n');
-		write(sock, buff, sizeof(buff));
+		send(sock, buff, sizeof(buff), 0);
 		
-        if ((strncmp(buff, "exit", 4)) == 0) {
-			printf("Client Exit...\n");
+
+        if ((strncmp(buff, "/exit", sizeof("/exit"))) == 0) {
 			break;
 		}
 	}
@@ -73,6 +78,12 @@ int main()
 		exit(0);
 	}
 	else printf("connected to the server...\n");
+
+	int n = 0;
+	printf("Please enter your pseudo : ");
+	while ((pseudo[n++] = getchar()) != '\n');
+	if(pseudo[strlen(pseudo) - 1] == '\n') pseudo[strlen(pseudo) - 1] = '\0';
+	write(sock, pseudo, sizeof(pseudo));
 
 	pid_t pid = fork();
 	if (pid == -1){

@@ -12,13 +12,14 @@
 #define SA struct sockaddr
 
 int clientCount = 0;
-static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t mutex; 
 static pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
 
 struct client {
 	int index;
 	int sockID;
 	int grpID;
+	char *pseudo;
 	struct sockaddr_in clientAddr;
 	int len;
 };
@@ -27,41 +28,62 @@ struct client Client[1024];
 pthread_t thread[1024]; 
 
 // functon handeling connexions
-void * doNetworking(void * ClientDetail){
-	// 
+void * clientListener(void * ClientDetail){
+	// var
 	struct client* clientDetail = (struct client*) ClientDetail;
 	int index = clientDetail -> index;
 	int clientSocket = clientDetail -> sockID;
+	char pseudo[254];
 	char dataIn[1024];
 	char dataOut[1024];
-	printf("Client %d connected, with a socketID of %d\n", index + 1, clientSocket);
+	//Waits for the pseudonym of the client
+	int read = recv(clientSocket, pseudo, 254, 0);
+	Client[index].pseudo = pseudo;
 
-	pid_t pid = fork();
+	printf("%s is connected...\n", Client[index].pseudo);
 
-	if(pid == -1){
-		perror("fork error");
-	} else if (pid == 0) {
-		// Receive messages
-		while(1){
-			bzero(dataIn, 1024);
-			int read = recv(clientSocket, dataIn, 1024, 0);
-			dataIn[read] = '\0';
-			printf("%s", dataIn);
-		}
-	} else {
-		// Send messages
-		int n = 0;
-		while(1){
-			bzero(dataOut, 1024);
-			n = 0;
-			while ((dataOut[n++] = getchar()) != '\n');
-			for (int i = 0; i < clientCount; i++){
-				write(Client[clientCount].sockID, dataOut, sizeof(dataOut));
+	while(1){
+		bzero(dataIn, 1024);
+		bzero(dataOut, 1024);
+		int read = recv(clientSocket, dataIn, 1024, 0);
+		dataIn[read] = '\0';
+		printf("%s : %s", Client[index].pseudo, dataIn);
+			
+		
+		// Allows to list all online clients, and sends it to the client
+		if ((strncmp(dataIn, "/list", 5)) == 0) {
+			strcpy(dataOut, "\033[0;32m");
+			for (int i = 0; i < clientCount; i++) {
+				if ((strncmp(Client[i+1].pseudo, "\0", 1)) != 0){
+					strcat(dataOut, Client[i+1].pseudo);
+					dataOut[strlen(dataOut)] = '\n';
+				}
 			}
-			//write(clientSocket, dataOut, sizeof(dataOut));
+			dataOut[strlen(dataOut)] = '\n';
+			strcat(dataOut, "\033[0m");
+			send(clientSocket, dataOut, strlen(dataOut), 0);
+		} 
+
+		// Allows client to exit
+		else if ((strncmp(dataIn, "/exit", 5)) == 0) {
+			send(clientSocket, "/exit", sizeof("/exit"), 0);
+			close(clientSocket);
+			//clientCount --;
+			break;
+		}
+
+		// Send message to all clients
+		else{
+			strcpy(dataOut, "\033[0;31m");
+			strcat(dataOut, Client[index].pseudo);
+			strcat(dataOut, " : ");
+			strcat(dataOut, dataIn);
+			strcat(dataOut, "\033[0m");
+			for(int i = 0; i < clientCount; i++){
+				send(Client[i].sockID, dataOut, sizeof(dataOut), 0);
+			}
 		}
 	}
-
 	return NULL;
 }
 
@@ -98,17 +120,19 @@ int main()
 	// threads each new connection to the server, and links a struct to each client
 	unsigned int newClient;
 	while(1){
+		pthread_mutex_init(&mutex, NULL);
 		newClient = Client[clientCount].len;
 		Client[clientCount].sockID = accept(serverSocket, (struct sockaddr*) &Client[clientCount].clientAddr, &newClient);
-		Client[clientCount].index = clientCount;
+		Client[clientCount].index = clientCount + 1;
 		
-		pthread_create(&thread[clientCount], NULL, doNetworking, (void *) &Client[clientCount]);
+		pthread_create(&thread[clientCount], NULL, clientListener, (void *) &Client[clientCount]);
 		
 		clientCount ++;
+		pthread_mutex_destroy(&mutex);
 	}
 
-	for(int i = 0 ; i < clientCount ; i ++)
-		pthread_join(thread[i], NULL);
+	//for(int i = 0 ; i < clientCount ; i ++)
+	//	pthread_join(thread[i], NULL);
 	// After chatting close the socket
 	close(serverSocket);
 }
