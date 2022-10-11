@@ -64,18 +64,19 @@ void broadcastClient(char *dataOut){
 
 // functon handeling connexions
 void * clientListener(void * ClientDetail){
-	// var
+	// variables
 	struct client* clientDetail = (struct client*) ClientDetail;
 	int index = clientDetail -> index;
 	int clientSocket = clientDetail -> sockID;
+	Client[index].pseudo = "default pseudo";
 	clientDetail -> grpID = "all";
 	char pseudo[254];
 	char dataIn[1024];
 	char dataOut[1024];
 	//Waits for the pseudonym of the client
 	int read = recv(clientSocket, pseudo, 254, 0);
-	Client[index].pseudo = pseudo;
 
+	Client[index].pseudo = pseudo;
 	strcpy(dataOut, Client[index].pseudo);
 	strcat(dataOut, " is connected !\n");
 	broadcastClient(dataOut);
@@ -112,6 +113,9 @@ void * clientListener(void * ClientDetail){
 		// Allows client to exit
 		else if ((strncmp(firstWord, "/exit", 5)) == 0) {
 			send(clientSocket, "/exit", sizeof("/exit"), 0);
+			strcpy(dataOut, clientDetail -> pseudo);
+			strcat(dataOut, " has disconnected...");
+			broadcastClient(dataOut);
 			close(clientSocket);
 			clientDetail -> sockID = 0;
 			break;
