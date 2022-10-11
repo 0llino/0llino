@@ -27,6 +27,13 @@ struct client {
 struct client Client[1024];
 pthread_t thread[1024]; 
 
+void broadcastClient(char *dataOut){
+	char buffer[1024];
+	for(int i = 0; i < clientCount; i++){
+		send(Client[i].sockID, dataOut, sizeof(buffer), 0);
+	}
+}
+
 // functon handeling connexions
 void * clientListener(void * ClientDetail){
 	// var
@@ -40,7 +47,12 @@ void * clientListener(void * ClientDetail){
 	int read = recv(clientSocket, pseudo, 254, 0);
 	Client[index].pseudo = pseudo;
 
-	printf("%s is connected...\n", Client[index].pseudo);
+	strcpy(dataOut, Client[index].pseudo);
+	strcat(dataOut, " is connected !\n");
+	broadcastClient(dataOut);
+	/*for(int i = 0; i < clientCount; i++){
+		send(Client[i].sockID, dataOut, sizeof(dataOut), 0);
+	}*/
 
 	while(1){
 		bzero(dataIn, 1024);
@@ -68,7 +80,7 @@ void * clientListener(void * ClientDetail){
 		else if ((strncmp(dataIn, "/exit", 5)) == 0) {
 			send(clientSocket, "/exit", sizeof("/exit"), 0);
 			close(clientSocket);
-			//clientCount --;
+			clientDetail -> sockID = 0;
 			break;
 		}
 
@@ -79,9 +91,7 @@ void * clientListener(void * ClientDetail){
 			strcat(dataOut, " : ");
 			strcat(dataOut, dataIn);
 			strcat(dataOut, "\033[0m");
-			for(int i = 0; i < clientCount; i++){
-				send(Client[i].sockID, dataOut, sizeof(dataOut), 0);
-			}
+			broadcastClient(dataOut);
 		}
 	}
 	return NULL;
