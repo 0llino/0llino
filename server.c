@@ -18,7 +18,7 @@ static pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
 struct client {
 	int index;
 	int sockID;
-	int grpID;
+	char *grpID;
 	char *pseudo;
 	struct sockaddr_in clientAddr;
 	int len;
@@ -27,11 +27,39 @@ struct client {
 struct client Client[1024];
 pthread_t thread[1024]; 
 
+//Allows to catch a specific word of the data send by the user
+char * GetToken( const char str[], size_t pos ){
+    const char delim[] = " \t";
+    char *inputCopy = malloc( ( strlen( str ) + 1 ) );
+    char *p = NULL;
+
+    if (inputCopy != NULL ){
+        strcpy(inputCopy, str );
+        p = strtok(inputCopy, delim );
+
+        while ( p != NULL && pos -- != 0 ){
+            p = strtok( NULL, delim );
+        }
+        if (p != NULL ){
+            size_t n = strlen(p);
+            memmove(inputCopy, p, n + 1);
+
+            p = realloc(inputCopy, n + 1);
+        }           
+        if (p == NULL ){
+            free(inputCopy );
+        }
+    }
+    return p;
+}
+
 void broadcastClient(char *dataOut){
 	char buffer[1024];
+	pthread_mutex_lock(&mutex);
 	for(int i = 0; i < clientCount; i++){
 		send(Client[i].sockID, dataOut, sizeof(buffer), 0);
 	}
+	pthread_mutex_unlock(&mutex);
 }
 
 // functon handeling connexions
@@ -40,6 +68,7 @@ void * clientListener(void * ClientDetail){
 	struct client* clientDetail = (struct client*) ClientDetail;
 	int index = clientDetail -> index;
 	int clientSocket = clientDetail -> sockID;
+	clientDetail -> grpID = "all";
 	char pseudo[254];
 	char dataIn[1024];
 	char dataOut[1024];
@@ -59,11 +88,15 @@ void * clientListener(void * ClientDetail){
 		bzero(dataOut, 1024);
 		int read = recv(clientSocket, dataIn, 1024, 0);
 		dataIn[read] = '\0';
+
+		char *firstWord = GetToken(dataIn, 0);
+		char *secondWord = GetToken(dataIn, 1);
+		char *thirdWord = GetToken(dataIn, 2);
 		printf("%s : %s", Client[index].pseudo, dataIn);
 			
 		
 		// Allows to list all online clients, and sends it to the client
-		if ((strncmp(dataIn, "/list", 5)) == 0) {
+		if ((strncmp(firstWord, "/list", 5)) == 0) {
 			strcpy(dataOut, "\033[0;32m");
 			for (int i = 0; i < clientCount; i++) {
 				if ((strncmp(Client[i+1].pseudo, "\0", 1)) != 0){
@@ -77,11 +110,62 @@ void * clientListener(void * ClientDetail){
 		} 
 
 		// Allows client to exit
-		else if ((strncmp(dataIn, "/exit", 5)) == 0) {
+		else if ((strncmp(firstWord, "/exit", 5)) == 0) {
 			send(clientSocket, "/exit", sizeof("/exit"), 0);
 			close(clientSocket);
 			clientDetail -> sockID = 0;
 			break;
+		}
+
+		// Privates messages
+		else if ((strncmp(firstWord, "/msg", 4)) == 0) {
+			int toRemove = strlen(secondWord) + 6; 
+			// removes /msg bob at the beginning 
+			memmove(dataIn, dataIn + toRemove, strlen(dataIn));
+
+			// adds "bob to josh :" at the beginning 
+			strcpy(dataOut, "\033[0;33m");
+			strcat(dataOut, Client[index].pseudo);
+			strcat(dataOut, " to ");
+			strcat(dataOut, secondWord);
+			strcat(dataOut, " : ");
+			strcat(dataOut, dataIn);
+			strcat(dataOut, "\033[0m");
+
+			// if second word == pseudo ; then send message
+			for(int i = 0; i < clientCount; i++){
+				if ((strncmp(secondWord, Client[i+1].pseudo, strlen(Client[i+1].pseudo))) == 0){
+					send(Client[i].sockID, dataOut, strlen(dataOut), 0);
+				}
+			}
+		}
+
+		else if ((strncmp(firstWord, "/grp", 4)) == 0) {
+			// If you want to change of group
+			if ((strncmp(secondWord, "set", 3)) == 0){
+				thirdWord[strlen(thirdWord)-1] = '\0';
+				clientDetail -> grpID = thirdWord;
+			}
+			// To send a message to all members of ur group
+			else {
+				memmove(dataIn, dataIn + 5, strlen(dataIn));
+
+
+				strcpy(dataOut, "\033[0;33m");
+				strcat(dataOut, Client[index].pseudo);
+				strcat(dataOut, " to group ");
+				strcat(dataOut, clientDetail -> grpID);
+				strcat(dataOut, " : ");
+				strcat(dataOut, dataIn);
+				strcat(dataOut, "\033[0m");
+
+				for(int i = 0; i < clientCount; i++){
+					printf("%s : %s\n", Client[i+1].pseudo, Client[i].grpID);
+					if (strncmp(clientDetail -> grpID, Client[i].grpID, strlen(clientDetail -> grpID)) == 0){
+						send(Client[i].sockID, dataOut, strlen(dataOut), 0);
+					}
+				}
+			}
 		}
 
 		// Send message to all clients
