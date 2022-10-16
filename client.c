@@ -15,6 +15,11 @@
 pthread_t thread[1024]; 
 char pseudo[MAX];
 
+// sleep() only works in seconds, usleep works in nano seconde (and then, msleep works in miliseconds)
+int msleep(unsigned int tms) {
+  return usleep(tms * 1000);
+}
+
 void recvMessage(int sock)
 {
 	char buff[MAX];
@@ -44,9 +49,9 @@ void sendMessage(int sock)
 		n = 0;
 		
 		//Message to send
+		printf("\33[2K\r");
         while ((buff[n++] = getchar()) != '\n');
 		send(sock, buff, sizeof(buff), 0);
-		
 
         if ((strncmp(buff, "/exit", sizeof("/exit"))) == 0) {
 			break;
