@@ -51,7 +51,9 @@ void sendMessage(int sock)
 		//Message to send
 		printf("\33[2K\r");
         while ((buff[n++] = getchar()) != '\n');
-		send(sock, buff, sizeof(buff), 0);
+		if(strlen(buff) != 1){
+			send(sock, buff, sizeof(buff), 0);
+		}
 
         if ((strncmp(buff, "/exit", sizeof("/exit"))) == 0) {
 			break;

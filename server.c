@@ -145,6 +145,13 @@ void * Dispatcher(){
 				}
 			}
 
+			else if ((strncmp(thirdWord, "/exit", 5)) == 0) {
+				send(clientSocket, "/exit", sizeof("/exit"), 0);
+				strcpy(dataTMP, sender);
+				strcat(dataTMP, " has disconnected...\n");
+				broadcastClient(dataTMP);
+			}
+
 			//Sends data to the client's group
 			else if ((strncmp(thirdWord, "/grp", 4)) == 0) {
 				// If you want to change of group
@@ -190,7 +197,11 @@ void * Dispatcher(){
 				}
 				dataTMP[strlen(dataTMP)] = '\n';
 				strcat(dataTMP, "\033[0m");
-				send(clientSocket, dataTMP, strlen(dataTMP), 0);
+				for(int i = 0; i < clientCount; i++){
+					if ((strncmp(sender, Client[i+1].pseudo, strlen(Client[i+1].pseudo))) == 0){
+						send(Client[i].sockID, dataTMP, strlen(dataTMP), 0);
+					}
+				}
 			} 
 			
 			else {
@@ -243,28 +254,24 @@ void * clientListener(void * ClientDetail){
 			strcpy(dataOut, Client[index].pseudo);
 			strcat(dataOut, " : ");
 			strcat(dataOut, dataIn);
+
 			write(fd[1], dataOut, sizeof(dataOut));
 		}
 	} else { 
 		// parent process | its goal is to parse the data given by the listener
-
 		while(1){
 			bzero(dataIn, 1024);
 			bzero(dataOut, 1024);
 			//int read = recv(clientSocket, dataIn, 1024, 0);
 			read(fd[0], dataIn, sizeof(dataIn));
 
-			char *firstWord = parseWord(dataIn, 0);
-			char *secondWord = parseWord(dataIn, 1);
-			char *thirdWord = parseWord(dataIn, 2);
+			char *command = parseWord(dataIn, 2);
 			//printf("%s : %s", Client[index].pseudo, dataIn);
 
 			// Allows client to exit
-			if ((strncmp(thirdWord, "/exit", 5)) == 0) {
-				send(clientSocket, "/exit", sizeof("/exit"), 0);
-				strcpy(dataOut, Client[index].pseudo);
-				strcat(dataOut, " has disconnected...\n");
-				broadcastClient(dataOut);
+			if ((strncmp(command, "/exit", 5)) == 0) {
+				push(stack, &top, dataIn);
+				msleep(100);
 				close(clientSocket);
 				clientDetail -> sockID = 0;
 				break;
