@@ -51,7 +51,7 @@ int pop(char stack[MAX][1024], int *top, char data[1024])
       }
 }
 
-// sleep() only works in seconds, usleep works in nano seconde (and then, msleep works in miliseconds)
+// sleep() only works in seconds, msleep works in miliseconds
 int msleep(unsigned int tms) {
   return usleep(tms * 1000);
 }
@@ -98,7 +98,7 @@ void * Dispatcher(){
 		
 		isNull = pop(stack, &top, data);
 		if(isNull != -1){
-			pop(stack, &top, data);
+			//pop(stack, &top, data);
 			msleep(20);
 
 			char *sender = parseWord(data, 0);
@@ -135,7 +135,6 @@ void * Dispatcher(){
 				strcat(dataTMP, fourthWord);
 				strcat(dataTMP, " : ");
 				strcat(dataTMP, data);
-				strcat(dataTMP, "\033[0m");
 
 				// if second word == pseudo ; then send message
 				for(int i = 0; i < clientCount; i++){
@@ -166,8 +165,7 @@ void * Dispatcher(){
 				}
 				// To send a message to all members of ur group
 				else {
-					memmove(data, data + 12, strlen(data));
-
+					memmove(data, data + 8 + strlen(sender), strlen(data));
 
 					strcpy(dataTMP, "\033[0;31m");
 					strcat(dataTMP, sender);
@@ -175,7 +173,6 @@ void * Dispatcher(){
 					strcat(dataTMP, groupID);
 					strcat(dataTMP, " : ");
 					strcat(dataTMP, data);
-					strcat(dataTMP, "\033[0m");
 
 					for(int i = 0; i < clientCount; i++){
 						printf("%s : %s\n", Client[i+1].pseudo, Client[i].grpID);
@@ -196,7 +193,6 @@ void * Dispatcher(){
 					}
 				}
 				dataTMP[strlen(dataTMP)] = '\n';
-				strcat(dataTMP, "\033[0m");
 				for(int i = 0; i < clientCount; i++){
 					if ((strncmp(sender, Client[i+1].pseudo, strlen(Client[i+1].pseudo))) == 0){
 						send(Client[i].sockID, dataTMP, strlen(dataTMP), 0);
@@ -205,11 +201,10 @@ void * Dispatcher(){
 			} 
 			
 			else {
-			strcpy(dataTMP, "\033[0;31m");
-			strcat(dataTMP, data);
-			strcat(dataTMP, "\033[0m");
-			printf("%s", dataTMP);
-			broadcastClient(dataTMP);
+				strcpy(dataTMP, "\033[0;31m");
+				strcat(dataTMP, data);
+				printf("%s", dataTMP);
+				broadcastClient(dataTMP);
 			}
 		}
 	}
@@ -236,11 +231,14 @@ void * clientListener(void * ClientDetail){
 	Client[index].pseudo = pseudo;
 	strcpy(dataOut, Client[index].pseudo);
 	strcat(dataOut, " is connected !\n");
+	pthread_mutex_lock(&mutex);
 	push(stack, &top, dataOut);
+	pthread_mutex_unlock(&mutex);
 
 	pid_t pid = fork();
-	if(pid == -1)
+	if(pid == -1){
 		return NULL;
+	}
 	else if(pid == 0){
 		// child process | its goal is to listen & receive data and send it to the parser
 
@@ -257,7 +255,8 @@ void * clientListener(void * ClientDetail){
 
 			write(fd[1], dataOut, sizeof(dataOut));
 		}
-	} else { 
+	} 
+	else { 
 		// parent process | its goal is to parse the data given by the listener
 		while(1){
 			bzero(dataIn, 1024);
@@ -270,8 +269,10 @@ void * clientListener(void * ClientDetail){
 
 			// Allows client to exit
 			if ((strncmp(command, "/exit", 5)) == 0) {
+				pthread_mutex_lock(&mutex);
 				push(stack, &top, dataIn);
-				msleep(100);
+				pthread_mutex_unlock(&mutex);
+				msleep(250);
 				close(clientSocket);
 				clientDetail -> sockID = 0;
 				break;
@@ -279,7 +280,9 @@ void * clientListener(void * ClientDetail){
 
 			// Send message to all clients
 			else{
+				pthread_mutex_lock(&mutex);
 				push(stack, &top, dataIn);
+				pthread_mutex_unlock(&mutex);
 			}
 		}
 	}
