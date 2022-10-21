@@ -76,7 +76,7 @@ char * parseWord( const char str[], size_t pos ){
             p = realloc(inputCopy, n + 1);
         }           
         if (p == NULL ){
-            free(inputCopy );
+            free(inputCopy);
         }
     }
     return p;
@@ -90,14 +90,116 @@ void broadcastClient(char *dataOut){
 }
 
 void * Dispatcher(){
-	char data[1024];
+	char data[1024], dataTMP[1024];
 	int isNull;
 	while(1){
+		bzero(data, 1024);
+		bzero(dataTMP, 1024);
+		
 		isNull = pop(stack, &top, data);
 		if(isNull != -1){
 			pop(stack, &top, data);
 			msleep(20);
-			broadcastClient(data);
+
+			char *sender = parseWord(data, 0);
+			char *secondWord = parseWord(data, 1);
+			char *thirdWord = parseWord(data, 2);
+			char *fourthWord = parseWord(data, 3);
+			char *fithWord = parseWord(data, 4);
+			int clientSocket;
+			char *groupID;
+
+			//Gets the client's socketID
+			for(int i = 0; i < clientCount; i++){
+				if ((strncmp(sender, Client[i+1].pseudo, strlen(Client[i+1].pseudo))) == 0){
+					clientSocket = Client[i].sockID;
+				}
+			}
+
+			//Gets the client's groupID
+			for(int i = 0; i < clientCount; i++){
+				if ((strncmp(sender, Client[i+1].pseudo, strlen(Client[i+1].pseudo))) == 0){
+					groupID = Client[i].grpID;
+				}
+			}
+			
+			if ((strncmp(thirdWord, "/msg", 4)) == 0) {
+				int toRemove = strlen(sender) + strlen(secondWord) + strlen(thirdWord) + strlen(fourthWord) + 4; 
+				// removes /msg bob at the beginning 
+				memmove(data, data + toRemove, strlen(data));
+
+				// adds "bob to josh :" at the beginning 
+				strcpy(dataTMP, "\033[0;33m");
+				strcat(dataTMP, sender);
+				strcat(dataTMP, " to ");
+				strcat(dataTMP, fourthWord);
+				strcat(dataTMP, " : ");
+				strcat(dataTMP, data);
+				strcat(dataTMP, "\033[0m");
+
+				// if second word == pseudo ; then send message
+				for(int i = 0; i < clientCount; i++){
+					if ((strncmp(fourthWord, Client[i+1].pseudo, strlen(Client[i+1].pseudo))) == 0){
+						send(Client[i].sockID, dataTMP, strlen(dataTMP), 0);
+					}
+				}
+			}
+
+			//Sends data to the client's group
+			else if ((strncmp(thirdWord, "/grp", 4)) == 0) {
+				// If you want to change of group
+				if ((strncmp(fourthWord, "set", 3)) == 0){
+					fithWord[strlen(fithWord)-1] = '\0';
+					for(int i = 0; i < clientCount; i++){
+						if ((strncmp(sender, Client[i+1].pseudo, strlen(Client[i+1].pseudo))) == 0){
+							Client[i].grpID = fithWord;
+						}
+					}
+					groupID = fithWord;
+				}
+				// To send a message to all members of ur group
+				else {
+					memmove(data, data + 12, strlen(data));
+
+
+					strcpy(dataTMP, "\033[0;31m");
+					strcat(dataTMP, sender);
+					strcat(dataTMP, " to group ");
+					strcat(dataTMP, groupID);
+					strcat(dataTMP, " : ");
+					strcat(dataTMP, data);
+					strcat(dataTMP, "\033[0m");
+
+					for(int i = 0; i < clientCount; i++){
+						printf("%s : %s\n", Client[i+1].pseudo, Client[i].grpID);
+						if (strncmp(groupID, Client[i].grpID, strlen(groupID)) == 0){
+							send(Client[i].sockID, dataTMP, strlen(dataTMP), 0);
+						}
+					}
+				}
+			}
+
+			// Allows to list all online clients, and sends it to the client
+			else if ((strncmp(thirdWord, "/list", 5)) == 0) {
+				strcat(dataTMP, "\033[0;32m");
+				for (int i = 0; i < clientCount; i++) {
+					if ((strncmp(Client[i+1].pseudo, "\0", 1)) != 0){
+						strcat(dataTMP, Client[i+1].pseudo);
+						dataTMP[strlen(dataTMP)] = '\n';
+					}
+				}
+				dataTMP[strlen(dataTMP)] = '\n';
+				strcat(dataTMP, "\033[0m");
+				send(clientSocket, dataTMP, strlen(dataTMP), 0);
+			} 
+			
+			else {
+			strcpy(dataTMP, "\033[0;31m");
+			strcat(dataTMP, data);
+			strcat(dataTMP, "\033[0m");
+			printf("%s", dataTMP);
+			broadcastClient(dataTMP);
+			}
 		}
 	}
 	return NULL;
@@ -124,20 +226,27 @@ void * clientListener(void * ClientDetail){
 	strcpy(dataOut, Client[index].pseudo);
 	strcat(dataOut, " is connected !\n");
 	push(stack, &top, dataOut);
-	//broadcastClient(dataOut);
 
 	pid_t pid = fork();
 	if(pid == -1)
 		return NULL;
-
 	else if(pid == 0){
+		// child process | its goal is to listen & receive data and send it to the parser
+
 		while(1){
 			bzero(dataIn, 1024);
+			bzero(dataOut, 1024);
+			
 			receved = recv(clientSocket, dataIn, 1024, 0);
 			dataIn[receved] = '\0';
-			write(fd[1], dataIn, sizeof(dataIn));
+
+			strcpy(dataOut, Client[index].pseudo);
+			strcat(dataOut, " : ");
+			strcat(dataOut, dataIn);
+			write(fd[1], dataOut, sizeof(dataOut));
 		}
 	} else { 
+		// parent process | its goal is to parse the data given by the listener
 
 		while(1){
 			bzero(dataIn, 1024);
@@ -148,25 +257,10 @@ void * clientListener(void * ClientDetail){
 			char *firstWord = parseWord(dataIn, 0);
 			char *secondWord = parseWord(dataIn, 1);
 			char *thirdWord = parseWord(dataIn, 2);
-			printf("%s : %s", Client[index].pseudo, dataIn);
-				
-			
-			// Allows to list all online clients, and sends it to the client
-			if ((strncmp(firstWord, "/list", 5)) == 0) {
-				strcpy(dataOut, "\033[0;32m");
-				for (int i = 0; i < clientCount; i++) {
-					if ((strncmp(Client[i+1].pseudo, "\0", 1)) != 0){
-						strcat(dataOut, Client[i+1].pseudo);
-						dataOut[strlen(dataOut)] = '\n';
-					}
-				}
-				dataOut[strlen(dataOut)] = '\n';
-				strcat(dataOut, "\033[0m");
-				send(clientSocket, dataOut, strlen(dataOut), 0);
-			} 
+			//printf("%s : %s", Client[index].pseudo, dataIn);
 
 			// Allows client to exit
-			else if ((strncmp(firstWord, "/exit", 5)) == 0) {
+			if ((strncmp(thirdWord, "/exit", 5)) == 0) {
 				send(clientSocket, "/exit", sizeof("/exit"), 0);
 				strcpy(dataOut, Client[index].pseudo);
 				strcat(dataOut, " has disconnected...\n");
@@ -176,65 +270,9 @@ void * clientListener(void * ClientDetail){
 				break;
 			}
 
-			// Privates messages
-			else if ((strncmp(firstWord, "/msg", 4)) == 0) {
-				int toRemove = strlen(secondWord) + 6; 
-				// removes /msg bob at the beginning 
-				memmove(dataIn, dataIn + toRemove, strlen(dataIn));
-
-				// adds "bob to josh :" at the beginning 
-				strcpy(dataOut, "\033[0;33m");
-				strcat(dataOut, Client[index].pseudo);
-				strcat(dataOut, " to ");
-				strcat(dataOut, secondWord);
-				strcat(dataOut, " : ");
-				strcat(dataOut, dataIn);
-				strcat(dataOut, "\033[0m");
-
-				// if second word == pseudo ; then send message
-				for(int i = 0; i < clientCount; i++){
-					if ((strncmp(secondWord, Client[i+1].pseudo, strlen(Client[i+1].pseudo))) == 0){
-						send(Client[i].sockID, dataOut, strlen(dataOut), 0);
-					}
-				}
-			}
-
-			else if ((strncmp(firstWord, "/grp", 4)) == 0) {
-				// If you want to change of group
-				if ((strncmp(secondWord, "set", 3)) == 0){
-					thirdWord[strlen(thirdWord)-1] = '\0';
-					clientDetail -> grpID = thirdWord;
-				}
-				// To send a message to all members of ur group
-				else {
-					memmove(dataIn, dataIn + 5, strlen(dataIn));
-
-
-					strcpy(dataOut, "\033[0;31m");
-					strcat(dataOut, Client[index].pseudo);
-					strcat(dataOut, " to group ");
-					strcat(dataOut, clientDetail -> grpID);
-					strcat(dataOut, " : ");
-					strcat(dataOut, dataIn);
-					strcat(dataOut, "\033[0m");
-
-					for(int i = 0; i < clientCount; i++){
-						printf("%s : %s\n", Client[i+1].pseudo, Client[i].grpID);
-						if (strncmp(clientDetail -> grpID, Client[i].grpID, strlen(clientDetail -> grpID)) == 0){
-							send(Client[i].sockID, dataOut, strlen(dataOut), 0);
-						}
-					}
-				}
-			}
-
 			// Send message to all clients
 			else{
-				strcpy(dataOut, "\033[0;31m");
-				strcat(dataOut, Client[index].pseudo);
-				strcat(dataOut, " : ");
-				strcat(dataOut, dataIn);
-				strcat(dataOut, "\033[0m");
-				push(stack, &top, dataOut);
+				push(stack, &top, dataIn);
 			}
 		}
 	}
