@@ -202,7 +202,7 @@ void * Dispatcher(){
 
 			else if ((strncmp(thirdWord, "/help", 5)) == 0) {
 				strcpy(dataTMP, "\033[0;32m");
-				strcat(dataTMP, "Possible commands :\n\t/list to list all connected clients\n\t/msg <user> to send private message to another user\n");
+				strcat(dataTMP, "Possible commands :\n\t/list to list all connected clients\n\t/msg <user> <message> to send private message to another user\n");
 				strcat(dataTMP, "\t/grp set <groupName> to set yourself into a group chat\n\t/grp <message> to send message to all members of your group\n");
 				strcat(dataTMP, "\t/exit to exit your session");
 				dataTMP[strlen(dataTMP)] = '\n';
@@ -260,6 +260,7 @@ void * clientListener(void * ClientDetail){
 			bzero(dataIn, 1024);
 			bzero(dataOut, 1024);
 			
+			//always & forever lisen
 			receved = recv(clientSocket, dataIn, 1024, 0);
 			dataIn[receved] = '\0';
 
@@ -267,6 +268,7 @@ void * clientListener(void * ClientDetail){
 			strcat(dataOut, " : ");
 			strcat(dataOut, dataIn);
 
+			//sends data through the pipe
 			write(fd[1], dataOut, sizeof(dataOut));
 		}
 	} 
@@ -286,7 +288,7 @@ void * clientListener(void * ClientDetail){
 				pthread_mutex_lock(&mutex);
 				push(stack, &top, dataIn);
 				pthread_mutex_unlock(&mutex);
-				msleep(500);
+				msleep(1000);
 				close(clientSocket);
 				clientDetail -> sockID = 0;
 				break;

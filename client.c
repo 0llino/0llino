@@ -5,7 +5,7 @@
 #include <string.h>
 #include <strings.h> // bzero()
 #include <sys/socket.h>
-#include <pthread.h>
+#include <pthread.h> //threading
 #include <unistd.h> // read(), write(), close()
 
 #define MAX 254
@@ -32,7 +32,6 @@ void recvMessage(int sock)
 
 		if ((strncmp(buff, "/exit", 5)) == 0) {
 			printf("\nClient Exit...\n");
-			close(sock);
 			break;
 		}
 	}
@@ -51,9 +50,11 @@ void sendMessage(int sock)
 		//Message to send
 		printf("\33[2K\r");
         while ((buff[n++] = getchar()) != '\n');
-		if(strlen(buff) != 1){
+		if(strlen(buff) != 1 && strlen(buff) <= 1020){
 			send(sock, buff, sizeof(buff), 0);
 		}
+		else 
+			printf("Invalid message size...\n");
 
         if ((strncmp(buff, "/exit", sizeof("/exit"))) == 0) {
 			break;
