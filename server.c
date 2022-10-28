@@ -15,7 +15,7 @@
 int clientCount = 0, top = -1;
 char stack[MAX][1024];
 static pthread_mutex_t mutex; 
-static pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
+//static pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
 
 struct client {
 	int index;
@@ -185,13 +185,26 @@ void * Dispatcher(){
 
 			// Allows to list all online clients, and sends it to the client
 			else if ((strncmp(thirdWord, "/list", 5)) == 0) {
-				strcat(dataTMP, "\033[0;32m");
+				strcpy(dataTMP, "\033[0;32m");
 				for (int i = 0; i < clientCount; i++) {
 					if ((strncmp(Client[i+1].pseudo, "\0", 1)) != 0){
 						strcat(dataTMP, Client[i+1].pseudo);
 						dataTMP[strlen(dataTMP)] = '\n';
 					}
 				}
+				dataTMP[strlen(dataTMP)] = '\n';
+				for(int i = 0; i < clientCount; i++){
+					if ((strncmp(sender, Client[i+1].pseudo, strlen(Client[i+1].pseudo))) == 0){
+						send(Client[i].sockID, dataTMP, strlen(dataTMP), 0);
+					}
+				}
+			} 
+
+			else if ((strncmp(thirdWord, "/help", 5)) == 0) {
+				strcpy(dataTMP, "\033[0;32m");
+				strcat(dataTMP, "Possible commands :\n\t/list to list all connected clients\n\t/msg <user> to send private message to another user\n");
+				strcat(dataTMP, "\t/grp set <groupName> to set yourself into a group chat\n\t/grp <message> to send message to all members of your group\n");
+				strcat(dataTMP, "\t/exit to exit your session");
 				dataTMP[strlen(dataTMP)] = '\n';
 				for(int i = 0; i < clientCount; i++){
 					if ((strncmp(sender, Client[i+1].pseudo, strlen(Client[i+1].pseudo))) == 0){
@@ -238,6 +251,7 @@ void * clientListener(void * ClientDetail){
 	pid_t pid = fork();
 	if(pid == -1){
 		return NULL;
+		perror("forking");
 	}
 	else if(pid == 0){
 		// child process | its goal is to listen & receive data and send it to the parser
@@ -272,7 +286,7 @@ void * clientListener(void * ClientDetail){
 				pthread_mutex_lock(&mutex);
 				push(stack, &top, dataIn);
 				pthread_mutex_unlock(&mutex);
-				msleep(250);
+				msleep(500);
 				close(clientSocket);
 				clientDetail -> sockID = 0;
 				break;
@@ -337,8 +351,6 @@ int main()
 		pthread_mutex_destroy(&mutex);
 	}
 
-	//for(int i = 0 ; i < clientCount ; i ++)
-	//	pthread_join(thread[i], NULL);
 	// After chatting close the socket
 	close(serverSocket);
 }
